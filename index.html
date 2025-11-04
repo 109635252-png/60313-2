@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <title>絕地求生 (AI測試)</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CSS 樣式基本不變 --- */
+        body {
+            font-family: 'Noto Sans TC', sans-serif; margin: 0; background-color: #000; color: #fff; overflow: hidden;
+        }
+        #blocker {
+            position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex;
+            justify-content: center; align-items: center; text-align: center; z-index: 100;
+        }
+        #instructions { width: 80%; max-width: 600px; cursor: pointer; }
+        #instructions h1 { font-size: 3em; }
+        #instructions p { font-size: 1.2em; }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 5px rgba(0,0,0,0.8); z-index: 10; display: none;
+        }
+        #hud {
+            position: absolute; bottom: 20px; left: 20px; font-size: 1.5em; background-color: rgba(0,0,0,0.5);
+            padding: 10px; border-radius: 8px; z-index: 10; display: none; min-width: 220px;
+        }
+        .hud-item { margin-bottom: 5px; }
+        #user-info {
+            position: absolute; top: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.6); padding: 5px 10px;
+            border-radius: 5px; font-size: 0.9em; z-index: 10; display: none;
+        }
+        #touch-controls { position: absolute; bottom: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+        #joystick-area { position: absolute; bottom: 30px; left: 30px; width: 150px; height: 150px; background-color: rgba(255, 255, 255, 0.2); border-radius: 50%; pointer-events: auto; }
+        #joystick-handle { position: absolute; top: 50%; left: 50%; width: 70px; height: 70px; background-color: rgba(255, 255, 255, 0.5); border-radius: 50%; transform: translate(-50%, -50%); transition: transform 0.1s; }
+        #action-buttons { position: absolute; bottom: 30px; right: 30px; display: flex; flex-direction: column; align-items: center; pointer-events: auto; }
+        #action-buttons button { width: 65px; height: 65px; margin: 8px 0; font-size: 2em; background-color: rgba(255, 255, 255, 0.3); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 50%; color: white; padding: 0; line-height: 65px; text-align: center; user-select: none; backdrop-filter: blur(5px); transition: background-color 0.1s; }
+        #switch-weapon-button { width: 60px; height: 60px; line-height: 60px; font-size: 1.8em; margin-top: 15px; order: -1; }
+        #action-buttons button:active { background-color: rgba(255, 255, 255, 0.6); }
+        #damage-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 0, 0, 0); z-index: 50; pointer-events: none; transition: background-color 0.1s ease-out; }
+        #view-toggle-button { position: absolute; top: 20px; right: 20px; width: 60px; height: 60px; font-size: 1.2em; background-color: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 8px; color: white; cursor: pointer; z-index: 10; backdrop-filter: blur(5px); display: none; }
+        #view-toggle-button:active { background-color: rgba(0, 0, 0, 0.7); }
+    </style>
+</head>
+<body>
+    <div id="blocker">
+        <div id="instructions">
+            <h1>絕地求生 (AI測試)</h1>
+            <p id="start-prompt" style="font-size: 1.5em;">點擊螢幕開始遊戲</p>
+            <p id="controls-info">
+                <!-- 恢復 W/S 控制說明 -->
+                W = 前進<br/>
+                S = 後退<br/>
+                A, D = 移動<br/>
+                Shift = 滑鏟 (需向前移動時)<br/>
+                空白鍵 = 跳躍<br/>
+                滑鼠 = 環顧四周<br/>
+                滑鼠左鍵 = 射擊 / 攻擊<br/>
+                滑鼠滾輪 = 縮放瞄準<br/>
+                R = 換彈<br/>
+                ESC = 解鎖滑鼠<br/>
+                V = 切換視角 (第一/第三人稱)<br/>
+                1 = 卡賓槍<br/>
+                2 = 突擊步槍<br/>
+                3 = 手槍<br/>
+                4 = 武器刀<br/><br/>
+                <span style="color: #ffdddd;">注意：紅色方塊為敵人，藍色為友軍 (僅在本機顯示)</span>
+            </p>
+        </div>
+    </div>
+
+    <div id="damage-overlay"></div>
+
+    <div id="crosshair"></div>
+    <div id="hud">
+        <div class="hud-item">❤️ 血量: <span id="health">100</span></div>
+        <div class="hud-item">彈藥: <span id="ammo">30 / 30</span></div>
+        <div class="hud-item" style="color: #ffaaaa;">敵人Bot: <span id="enemy-bots-count">0</span></div>
+        <div class="hud-item" style="color: #aaaaff;">友軍Bot: <span id="ally-bots-count">0</span></div>
+    </div>
+    <div id="user-info">UserID: <span id="user-id">正在載入...</span></div>
+
+    <div id="touch-controls" style="display: none;">
+        <div id="joystick-area"><div id="joystick-handle"></div></div>
+        <div id="action-buttons">
+            <button id="switch-weapon-button">🔁</button> <button id="shoot-button">🔫</button> <button id="reload-button">🔄</button>
+            <button id="slide-button">🏃</button> <button id="jump-button">🔼</button>
+        </div>
+    </div>
+
+    <button id="view-toggle-button">第三人稱</button>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+        import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/PointerLockControls.js';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js';
+
+        // --- Firebase ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp, deleteDoc, updateDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
+        let db, auth; let userId = null; let unsubscribePlayerListener = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // ---
+
+        let camera, scene, renderer, controls; let fpControls; let tpControls; let isFirstPerson = true;
+        let playerBody; const SPAWN_POINT = new THREE.Vector3(100, 9, 100);
+
+        // --- 武器系統 ---
+        let weaponHolder; let weapons = []; let currentWeaponIndex = 0; let muzzleFlash;
+        let isKnifeAnimating = false;
+        // *** 更改為 Z 軸突刺 ***
+        const KNIFE_LUNGE_AMOUNT = -0.8; // Z軸向前突刺的距離
+        const KNIFE_SWING_SPEED = 15;
+        let knifeTargetPosition = -1.2; // 刀的 Z 軸目標位置 (會被 initGame 覆蓋)
+        // ---
+
+        let objects = []; let groundObjects = []; let raycaster;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false; let isReloading = false; let isSliding = false; let slideCooldown = 0;
+        let isShooting = false; let lastShotTime = 0;
+
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3(); const direction = new THREE.Vector3();
+
+        let health = 100; let isDead = false; let lastDamageTime = 0; let lastUpdateTime = 0;
+
+        // --- 多人遊戲 ---
+        const remotePlayers = {}; const GAME_ID = "default_game"; const PLAYER_COLLECTION_PATH = `/artifacts/${appId}/public/data/game_state/${GAME_ID}/players`;
+        // ---
+
+        // --- AI Bots (Client-Side Only) ---
+        const enemyBots = []; const allyBots = []; const botTargets = [];
+        const MAX_ENEMY_BOTS = 10; const MAX_ALLY_BOTS = 2;
+        const ENEMY_BOT_COLOR = 0xff4444; const ALLY_BOT_COLOR = 0x4444ff;
+        const BOT_SPEED = 18; const BOT_FOLLOW_DISTANCE = 15; const BOT_ATTACK_RANGE = 5;
+        const BOT_STATE = { IDLE: 0, FOLLOW: 1, ATTACK: 2, WANDER: 3 }; // AI 狀態
+        // ---
+
+        let playerCollider = new THREE.Box3();
+
+        const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ'); const PI_2 = Math.PI / 2;
+        let lookTouchId = -1; const lookLastPos = new THREE.Vector2();
+        const joystick = { active: false, initial: new THREE.Vector2(), delta: new THREE.Vector2() };
+
+        const healthElement = document.getElementById('health'); const ammoElement = document.getElementById('ammo');
+        const hudElement = document.getElementById('hud'); const crosshairElement = document.getElementById('crosshair');
+        const damageOverlayElement = document.getElementById('damage-overlay'); const viewToggleButton = document.getElementById('view-toggle-button');
+        const userIdElement = document.getElementById('user-id'); const userInfoElement = document.getElementById('user-info');
+        const enemyBotsCountElement = document.getElementById('enemy-bots-count'); const allyBotsCountElement = document.getElementById('ally-bots-count');
+
+        const textureLoader = new THREE.TextureLoader();
+
+        // --- Firebase 初始化 ---
+        async function initializeFirebase() { /* ... (Firebase 初始化不變) ... */
+             try { if (typeof __firebase_config === 'undefined') { console.error("Firebase config is not defined."); userIdElement.textContent = "Firebase 設定錯誤"; return; } const firebaseConfig = JSON.parse(__firebase_config); const app = initializeApp(firebaseConfig); db = getFirestore(app); auth = getAuth(app); setLogLevel('debug'); onAuthStateChanged(auth, async (user) => { if (user) { userId = user.uid; console.log("Authenticated User ID:", userId); userIdElement.textContent = userId; userInfoElement.style.display = 'block'; initGame(); setupFirestoreListener(); animate(); } else { console.log("User is not authenticated. Signing in..."); try { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } else { await signInAnonymously(auth); } } catch (error) { console.error("Authentication Error:", error); userIdElement.textContent = "驗證失敗"; } } }); } catch (error) { console.error("Firebase Initialization Error:", error); userIdElement.textContent = "Firebase 初始化失敗"; }
+         }
+        // ---
+
+        initializeFirebase();
+
+        function initGame() {
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(SPAWN_POINT.x, SPAWN_POINT.y + 1, SPAWN_POINT.z + 30);
+            scene = new THREE.Scene();
+
+            const skyboxTextures = [ 'https://threejs.org/examples/textures/cube/Bridge2/posx.jpg', 'https://threejs.org/examples/textures/cube/Bridge2/negx.jpg', 'https://threejs.org/examples/textures/cube/Bridge2/posy.jpg', 'https://threejs.org/examples/textures/cube/Bridge2/negy.jpg', 'https://threejs.org/examples/textures/cube/Bridge2/posz.jpg', 'https://threejs.org/examples/textures/cube/Bridge2/negz.jpg', ];
+            const cubeTextureLoader = new THREE.CubeTextureLoader(); scene.background = cubeTextureLoader.load(skyboxTextures);
+            scene.fog = new THREE.Fog(0xcce0ff, 0, 750);
+
+            const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.9); light.position.set(0.5, 1, 0.75); scene.add(light);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7); dirLight.position.set(-100, 100, 50); dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 100; dirLight.shadow.camera.bottom = -100; dirLight.shadow.camera.left = -100; dirLight.shadow.camera.right = 100; scene.add(dirLight);
+
+            raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 10);
+
+            textureLoader.load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg', (grassTexture) => { grassTexture.wrapS = THREE.RepeatWrapping; grassTexture.wrapT = THREE.RepeatWrapping; grassTexture.repeat.set(200, 200); const floor = new THREE.Mesh( new THREE.PlaneGeometry(2000, 2000, 100, 100), new THREE.MeshLambertMaterial({ map: grassTexture }) ); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor); groundObjects.push(floor); objects.push(floor); });
+
+            const boxGeometry = new THREE.BoxGeometry(20, 20, 20);
+            for (let i = 0; i < 50; i++) { const box = new THREE.Mesh(boxGeometry, new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff })); box.position.set(Math.floor(Math.random() * 20 - 10) * 20, 10, Math.floor(Math.random() * 20 - 10) * 20); box.castShadow = true; box.receiveShadow = true; scene.add(box); objects.push(box); groundObjects.push(box); }
+
+            const playerGeometry = new THREE.BoxGeometry(4, 18, 4); const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x0077ff }); playerBody = new THREE.Mesh(playerGeometry, playerMaterial); playerBody.position.copy(SPAWN_POINT); playerBody.castShadow = true; playerBody.receiveShadow = true; scene.add(playerBody);
+
+            // --- 武器模型系統 (再次細化) ---
+            weaponHolder = new THREE.Group(); weaponHolder.position.set(0.5, -0.4, -1.2); weaponHolder.rotation.y = -0.1;
+
+            const gunMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6, metalness: 0.7 });
+            const darkGunMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.8 });
+            const meleeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.2, metalness: 1.0 });
+            const handleMaterial = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.8 });
+            const sightMaterial = new THREE.MeshBasicMaterial({ color: 0xff4500 }); // Orange/Red sight
+
+            // --- 模型 1: 卡賓槍 (加提把) ---
+            const carbineModel = new THREE.Group();
+            const carbineBody = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.25, 0.9), gunMaterial); carbineBody.position.y = -0.05;
+            const carbineStock = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.4), handleMaterial); carbineStock.position.set(0, -0.15, 0.6);
+            const carbineBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.7, 12), darkGunMaterial); carbineBarrel.position.z = -0.8; carbineBarrel.rotation.x = Math.PI / 2;
+            const carbineCarryHandle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.25), darkGunMaterial); carbineCarryHandle.position.set(0, 0.2, 0); // 提把
+            carbineModel.add(carbineBody, carbineStock, carbineBarrel, carbineCarryHandle);
+            muzzleFlash = new THREE.PointLight(0xffa500, 0, 50, 2); muzzleFlash.position.set(0, 0, -0.7); carbineBarrel.add(muzzleFlash);
+            carbineModel.visible = true;
+
+            // --- 模型 2: 突擊步槍 (加瞄準鏡) ---
+            const assaultRifleModel = new THREE.Group();
+            const arBody = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.8), gunMaterial); arBody.position.y = -0.05;
+            const arStock = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.35), darkGunMaterial); arStock.position.set(0, -0.1, 0.55);
+            const arBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 12), darkGunMaterial); arBarrel.position.z = -0.7; arBarrel.rotation.x = Math.PI / 2;
+            const arGrip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.1), darkGunMaterial); arGrip.position.set(0, -0.2, 0.1); arGrip.rotation.x = -0.2;
+            const arMag = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.2), darkGunMaterial); arMag.position.set(0, -0.25, -0.15); arMag.rotation.x = 0.15;
+            const arScopeMount = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.1), darkGunMaterial); arScopeMount.position.set(0, 0.16, -0.1); // 瞄準鏡底座
+            const arScopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.25, 12), darkGunMaterial); arScopeBody.rotation.z = Math.PI / 2; arScopeBody.position.y = 0.05; arScopeMount.add(arScopeBody); // 瞄準鏡鏡身
+            const arScopeLensF = new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), new THREE.MeshBasicMaterial({color: 0x88ccff, transparent: true, opacity: 0.3})); arScopeLensF.position.x = 0.125; arScopeLensF.rotation.y = Math.PI / 2; arScopeBody.add(arScopeLensF); // 前鏡片
+            const arScopeLensB = new THREE.Mesh(new THREE.CircleGeometry(0.03, 12), new THREE.MeshBasicMaterial({color: 0x88ccff, transparent: true, opacity: 0.3})); arScopeLensB.position.x = -0.125; arScopeLensB.rotation.y = Math.PI / 2; arScopeBody.add(arScopeLensB); // 後鏡片
+            assaultRifleModel.add(arBody, arStock, arBarrel, arGrip, arMag, arScopeMount);
+            assaultRifleModel.visible = false;
+
+            // --- 模型 3: 手槍 (改進握把) ---
+            const pistolModel = new THREE.Group();
+            const pistolSlide = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.45), gunMaterial); pistolSlide.position.y = 0.1;
+            const pistolGripGeo = new THREE.BoxGeometry(0.12, 0.3, 0.15);
+            pistolGripGeo.translate(0, -0.05, 0); // 讓握把向下傾斜
+            const pistolGrip = new THREE.Mesh(pistolGripGeo, handleMaterial); pistolGrip.position.set(0, -0.03, 0.18); pistolGrip.rotation.x = 0.1;
+            const pistolBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 12), darkGunMaterial); pistolBarrel.position.z = -0.3; pistolBarrel.rotation.x = Math.PI / 2;
+            const pistolSightF = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.03, 0.015), darkGunMaterial); pistolSightF.position.set(0, 0.09, -0.18); pistolSlide.add(pistolSightF);
+            const pistolSightB = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.025, 0.02), darkGunMaterial); pistolSightB.position.set(0, 0.09, 0.15); pistolSlide.add(pistolSightB);
+            pistolModel.add(pistolSlide, pistolGrip, pistolBarrel);
+            pistolModel.visible = false;
+
+            // --- 模型 4: 武器刀 (設定初始位置) ---
+            const knifeModel = new THREE.Group();
+            const bladeShape = new THREE.Shape(); bladeShape.moveTo(0, 0); bladeShape.lineTo(0.04, 0.1); bladeShape.lineTo(0, 1.4); bladeShape.lineTo(-0.04, 0.1); bladeShape.lineTo(0, 0);
+            const extrudeSettings = { depth: 0.1, bevelEnabled: false }; const bladeGeometry = new THREE.ExtrudeGeometry(bladeShape, extrudeSettings);
+            const knifeBlade = new THREE.Mesh(bladeGeometry, meleeMaterial); knifeBlade.position.set(0, -0.05, -0.7); knifeBlade.rotation.y = Math.PI / 2; knifeBlade.scale.set(1, 1, 0.5);
+            const knifeHilt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.3, 12), handleMaterial); knifeHilt.position.z = 0.15; knifeHilt.rotation.x = Math.PI / 2;
+            const knifeGuard = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), darkGunMaterial); knifeGuard.position.z = 0.02;
+            knifeModel.add(knifeBlade, knifeHilt, knifeGuard);
+            // *** 儲存初始 Z 位置 ***
+            knifeModel.userData.initialPosition = knifeModel.position.clone();
+            knifeTargetPosition = knifeModel.userData.initialPosition.z; // 確保目標位置是初始位置
+            // ***
+            knifeModel.visible = false;
+
+            weaponHolder.add(carbineModel); weaponHolder.add(assaultRifleModel); weaponHolder.add(pistolModel); weaponHolder.add(knifeModel); camera.add(weaponHolder);
+
+            weapons = [
+                { name: '卡賓槍', model: carbineModel, ammo: 30, maxAmmo: 30, fireRate: 200, reloadTime: 1800, type: 'raycast', damage: 12 },
+                { name: '突擊步槍', model: assaultRifleModel, ammo: 40, maxAmmo: 40, fireRate: 120, reloadTime: 2200, type: 'raycast', damage: 9 },
+                { name: '手槍', model: pistolModel, ammo: 15, maxAmmo: 15, fireRate: 400, reloadTime: 1000, type: 'raycast', damage: 5 },
+                { name: '武器刀', model: knifeModel, ammo: 0, maxAmmo: 0, fireRate: 600, reloadTime: 0, type: 'melee', range: 8, damage: 30 }
+            ];
+            // --- 武器系統結束 ---
+
+            renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight); renderer.shadowMap.enabled = true; document.body.appendChild(renderer.domElement);
+            const blocker = document.getElementById('blocker'); const instructions = document.getElementById('instructions');
+
+            fpControls = new PointerLockControls(camera, document.body);
+            tpControls = new OrbitControls(camera, renderer.domElement); tpControls.enableDamping = true; tpControls.dampingFactor = 0.25; tpControls.maxDistance = 50; tpControls.minDistance = 10; tpControls.target.copy(playerBody.position); tpControls.enabled = false;
+
+            // --- 初始化 AI Bots ---
+            for (let i = 0; i < MAX_ENEMY_BOTS; i++) spawnBot(true);
+            for (let i = 0; i < MAX_ALLY_BOTS; i++) spawnBot(false);
+            updateBotCounts();
+            // ---
+
+            if (isMobile) {
+                document.getElementById('touch-controls').style.display = 'block'; document.getElementById('controls-info').innerHTML = '左側搖桿 = 移動<br/>右側螢幕 = 轉動視角<br/>右下角按鈕 = 各項動作<br/>左上角按鈕 = 切換視角<br/>右上角按鈕 = 循環切換武器<br/><span style="color: #ffdddd;">注意：紅色方塊為敵人，藍色為友軍 (僅在本機顯示)</span>';
+                instructions.addEventListener('click', startGame); setupTouchControls();
+            } else {
+                scene.add(fpControls.getObject());
+                instructions.addEventListener('click', () => fpControls.lock());
+                fpControls.addEventListener('lock', () => { instructions.style.display = 'none'; blocker.style.display = 'none'; hudElement.style.display = 'block'; viewToggleButton.style.display = 'block'; updateAmmoHUD(); });
+                fpControls.addEventListener('unlock', () => { blocker.style.display = 'flex'; instructions.style.display = ''; hudElement.style.display = 'none'; crosshairElement.style.display = 'none'; viewToggleButton.style.display = 'none'; });
+                document.addEventListener('mousedown', (e) => { if (isGameActive()) onPrimaryAction(e); });
+            }
+
+            document.addEventListener('keydown', onKeyDown); document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('wheel', onMouseWheel); window.addEventListener('resize', onWindowResize);
+            viewToggleButton.addEventListener('click', toggleView);
+            document.addEventListener('keydown', (event) => { if (event.code === 'KeyV' && isGameActive()) toggleView(); });
+
+            updateAmmoHUD();
+        }
+
+        // --- Firestore 監聽 ---
+        function setupFirestoreListener() { /* ... (監聽邏輯保持不變) ... */
+             if (!db) { console.error("Firestore DB not initialized for listener setup."); return; } if (unsubscribePlayerListener) unsubscribePlayerListener(); console.log("Setting up Firestore listener for path:", PLAYER_COLLECTION_PATH); const playersCollectionRef = collection(db, PLAYER_COLLECTION_PATH); unsubscribePlayerListener = onSnapshot(playersCollectionRef, (snapshot) => { console.log(`Firestore snapshot received. Doc changes count: ${snapshot.docChanges().length}`); snapshot.docChanges().forEach((change) => { const playerData = change.doc.data(); const docId = change.doc.id; console.log(`[Firestore Listener] Change detected: Type=${change.type}, ID=${docId}`); if (docId === userId) { if (change.type === "modified" && playerData.health !== undefined && playerData.health < health) { console.log(`[Firestore Listener] Detected remote damage for self (${userId}). Current health: ${health}, Firestore health: ${playerData.health}`); applyRemoteDamage(playerData.health); } return; } if (change.type === "added") { console.log(`[Firestore Listener] Remote player added: ${docId}`, playerData); if (!remotePlayers[docId]) { const remotePlayerGeometry = new THREE.BoxGeometry(4, 18, 4); const remotePlayerMaterial = new THREE.MeshStandardMaterial({ color: 0xffa500 }); const remotePlayerMesh = new THREE.Mesh(remotePlayerGeometry, remotePlayerMaterial); remotePlayerMesh.castShadow = true; remotePlayerMesh.receiveShadow = true; remotePlayerMesh.userData.userId = docId; if (playerData.position) { remotePlayerMesh.position.set(playerData.position.x, playerData.position.y, playerData.position.z); } if (playerData.quaternion) { remotePlayerMesh.quaternion.set(playerData.quaternion.x, playerData.quaternion.y, playerData.quaternion.z, playerData.quaternion.w); } scene.add(remotePlayerMesh); remotePlayers[docId] = { data: playerData, mesh: remotePlayerMesh }; console.log(`[Firestore Listener] Mesh added to scene for ${docId}`); } else { console.warn(`[Firestore Listener] Player ${docId} added event, but mesh already exists. Updating data.`); remotePlayers[docId].data = playerData; } } else if (change.type === "modified") { console.log(`[Firestore Listener] Updating remote player: ${docId}`, playerData); if (remotePlayers[docId]) { remotePlayers[docId].data = playerData; } else { console.warn(`[Firestore Listener] Player ${docId} modified event, but mesh does not exist. Ignoring.`); } } else if (change.type === "removed") { console.log(`[Firestore Listener] Remote player removed: ${docId}`); if (remotePlayers[docId]) { scene.remove(remotePlayers[docId].mesh); delete remotePlayers[docId]; console.log(`[Firestore Listener] Mesh removed from scene for ${docId}`); } else { console.warn(`[Firestore Listener] Player ${docId} removed event, but mesh does not exist. Ignoring.`); } } }); console.log(`[Firestore Listener] Current remote players count: ${Object.keys(remotePlayers).length}`); }, (error) => { console.error("Firestore listener error:", error); }); window.addEventListener('beforeunload', async () => { if (userId && db) { const playerDocRef = doc(db, PLAYER_COLLECTION_PATH, userId); try { await deleteDoc(playerDocRef); console.log("Removed player data for", userId); } catch(err) { console.error("Error removing player doc on unload:", err); } } });
+         }
+        // ---
+
+        function isGameActive() { return userId && !isDead && (isMobile ? (document.getElementById('blocker').style.display === 'none') : fpControls.isLocked || !isFirstPerson); }
+
+        function startGame() { /* ... (startGame 不變) ... */
+            health = 100; isDead = false; healthElement.textContent = health; playerBody?.position.copy(SPAWN_POINT); velocity.set(0, 0, 0); if(fpControls && fpControls.isLocked) fpControls.unlock(); document.getElementById('blocker').style.display = 'none'; hudElement.style.display = 'block'; viewToggleButton.style.display = 'block'; userInfoElement.style.display = 'block'; updateAmmoHUD(); if(!isMobile && isFirstPerson) { setTimeout(() => fpControls.lock(), 100); }
+        }
+
+        function toggleView() { /* ... (toggleView 不變) ... */
+            if (!playerBody || isDead) return; isFirstPerson = !isFirstPerson; if (isFirstPerson) { viewToggleButton.textContent = '第三人稱'; camera.position.copy(playerBody.position); camera.rotation.set(0, 0, 0); fpControls.getObject().position.copy(playerBody.position); fpControls.getObject().rotation.copy(camera.rotation); scene.add(fpControls.getObject()); playerBody.visible = false; weaponHolder.position.set(0.5, -0.4, -1.2); weaponHolder.rotation.y = -0.1; camera.add(weaponHolder); tpControls.enabled = false; if (!isMobile) fpControls.lock(); } else { viewToggleButton.textContent = '第一人稱'; scene.remove(fpControls.getObject()); playerBody.visible = true; weaponHolder.position.set(0, 0.5, -0.5); weaponHolder.rotation.y = 0; playerBody.add(weaponHolder); tpControls.target.copy(playerBody.position); const offset = new THREE.Vector3(0, 20, 30); camera.position.copy(playerBody.position).add(offset); tpControls.update(); tpControls.enabled = true; if (!isMobile) fpControls.unlock(); } updateAmmoHUD();
+        }
+
+        function setupTouchControls() {
+            // --- 恢復 W/S 控制 (搖桿) ---
+             const joystickArea = document.getElementById('joystick-area');
+            joystickArea.addEventListener('touchstart', (e) => { e.preventDefault(); joystick.active = true; joystick.initial.set(e.touches[0].clientX, e.touches[0].clientY); });
+            joystickArea.addEventListener('touchmove', (e) => {
+                if (!joystick.active) return; e.preventDefault();
+                const currentPos = new THREE.Vector2(e.touches[0].clientX, e.touches[0].clientY); joystick.delta.subVectors(currentPos, joystick.initial);
+                const handle = document.getElementById('joystick-handle'); const radius = joystickArea.clientWidth / 4;
+                if (joystick.delta.length() > radius) joystick.delta.normalize().multiplyScalar(radius);
+                handle.style.transform = `translate(-50%, -50%) translate(${joystick.delta.x}px, ${joystick.delta.y}px)`;
+                moveForward = joystick.delta.y < -15; // W (向前)
+                moveBackward = joystick.delta.y > 15; // S (向後)
+                moveLeft = joystick.delta.x < -15; // A
+                moveRight = joystick.delta.x > 15; // D
+            });
+            const joystickEnd = () => { joystick.active = false; document.getElementById('joystick-handle').style.transform = `translate(-50%, -50%)`; moveForward = moveBackward = moveLeft = moveRight = false; };
+            joystickArea.addEventListener('touchend', joystickEnd); joystickArea.addEventListener('touchcancel', joystickEnd);
+            // ---
+            window.addEventListener('touchstart', (e) => { for (const touch of e.changedTouches) { const targetElement = e.target.closest('button, #joystick-area'); if (targetElement) continue; if (touch.clientX > window.innerWidth / 2 && lookTouchId < 0) { lookTouchId = touch.identifier; lookLastPos.set(touch.clientX, touch.clientY); } } }); window.addEventListener('touchmove', (e) => { for (const touch of e.changedTouches) { if (touch.identifier === lookTouchId) { const currentPos = new THREE.Vector2(touch.clientX, touch.clientY); const deltaX = currentPos.x - lookLastPos.x; const deltaY = currentPos.y - lookLastPos.y; lookLastPos.copy(currentPos); euler.setFromQuaternion(camera.quaternion); euler.y -= deltaX * 0.002; euler.x -= deltaY * 0.002; euler.x = Math.max(-PI_2, Math.min(PI_2, euler.x)); camera.quaternion.setFromEuler(euler); } } }); const lookEnd = (e) => { for (const touch of e.changedTouches) { if (touch.identifier === lookTouchId) lookTouchId = -1; } }; window.addEventListener('touchend', lookEnd); window.addEventListener('touchcancel', lookEnd);
+            document.getElementById('shoot-button').addEventListener('touchstart', (e) => { e.preventDefault(); isShooting = true; }); document.getElementById('shoot-button').addEventListener('touchend', () => isShooting = false); document.getElementById('jump-button').addEventListener('touchstart', (e) => { e.preventDefault(); if (canJump && !isSliding) { velocity.y += 350; canJump = false; }}); document.getElementById('reload-button').addEventListener('touchstart', (e) => { e.preventDefault(); reload(); }); document.getElementById('slide-button').addEventListener('touchstart', (e) => { e.preventDefault(); if (moveForward && !isSliding && slideCooldown <= 0 && canJump) startSlide(); }); document.getElementById('switch-weapon-button').addEventListener('touchstart', (e) => { e.preventDefault(); const nextIndex = (currentWeaponIndex + 1) % weapons.length; switchWeapon(nextIndex); }); viewToggleButton.addEventListener('touchstart', (e) => { e.preventDefault(); toggleView(); });
+        }
+
+        function onKeyDown(event) {
+             if (isDead) return;
+            switch (event.code) {
+                // --- 恢復 W/S 控制 ---
+                case 'KeyW': moveForward = true; break; // W 前進
+                case 'KeyS': moveBackward = true; break; // S 後退
+                // ---
+                case 'KeyA': moveLeft = true; break; case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump && !isSliding) { velocity.y += 350; canJump = false; } break;
+                case 'KeyR': reload(); break;
+                case 'ShiftLeft': if (moveForward && !isSliding && slideCooldown <= 0 && canJump) startSlide(); break; // Slide based on 'forward' (W key)
+                case 'Digit1': switchWeapon(0); break; case 'Digit2': switchWeapon(1); break;
+                case 'Digit3': switchWeapon(2); break; case 'Digit4': switchWeapon(3); break;
+            }
+        };
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                // --- 恢復 W/S 控制 ---
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                // ---
+                case 'KeyA': moveLeft = false; break; case 'KeyD': moveRight = false; break;
+            }
+        };
+
+        function onMouseWheel(event) { if (isDead) return; if (isFirstPerson) { if (!isMobile && !fpControls.isLocked) return; camera.fov = Math.max(20, Math.min(75, camera.fov - event.deltaY * 0.05)); camera.updateProjectionMatrix(); } }
+        function startSlide() { if (isDead) return; isSliding = true; canJump = false; slideCooldown = 1.5; setTimeout(() => isSliding = false, 500); }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+        function switchWeapon(index) { /* ... (switchWeapon 不變) ... */
+             if (index < 0 || index >= weapons.length || index === currentWeaponIndex || isReloading || isDead) return; const currentWeapon = weapons[currentWeaponIndex]; if (currentWeapon && currentWeapon.model) { currentWeapon.model.visible = false; } currentWeaponIndex = index; const newWeapon = weapons[currentWeaponIndex]; if (newWeapon && newWeapon.model) { newWeapon.model.visible = true; } else { console.warn(`Weapon at index ${index} or its model is missing.`); } updateAmmoHUD();
+        }
+
+        function updateAmmoHUD() { /* ... (updateAmmoHUD 不變) ... */
+            if (!weapons || weapons.length === 0 || currentWeaponIndex >= weapons.length) return; const currentWeapon = weapons[currentWeaponIndex]; if (!currentWeapon) return; if (currentWeapon.type === 'melee') { ammoElement.textContent = `⚔️ ${currentWeapon.name}`; if (isMobile) document.getElementById('shoot-button').textContent = '⚔️'; crosshairElement.style.display = 'none'; } else { ammoElement.textContent = `${currentWeapon.name}: ${currentWeapon.ammo} / ${currentWeapon.maxAmmo}`; if (isMobile) document.getElementById('shoot-button').textContent = '🔫'; crosshairElement.style.display = (isFirstPerson && isGameActive()) ? 'block' : 'none'; }
+        }
+
+        // --- 主要動作（射擊/攻擊） ---
+        async function onPrimaryAction(event) {
+            if (isDead || isKnifeAnimating) return;
+            const time = performance.now(); const currentWeapon = weapons[currentWeaponIndex];
+            if (isReloading || time - lastShotTime < currentWeapon.fireRate) return;
+            if (!isMobile && isFirstPerson && event && event.button !== 0) return;
+            lastShotTime = time;
+
+            if (currentWeapon.type === 'raycast') {
+                if (currentWeapon.ammo <= 0) return; currentWeapon.ammo--; updateAmmoHUD();
+                if (currentWeapon.name === '卡賓槍') { muzzleFlash.intensity = 20; setTimeout(() => muzzleFlash.intensity = 0, 80); }
+                // *** 修正：突擊步槍沒有自己的 muzzleFlash，需要加上 (或者共用) ***
+                // 暫時讓它也能觸發 (因為 muzzleFlash 在 carbineModel 上，而 AR 獨立了)
+                // 為了簡單起見，我們讓突擊步槍也觸發卡賓槍的 muzzleFlash
+                if (currentWeapon.name === '突擊步槍') {
+                     // 理想情況下 AR 應該有自己的 flash，附加到 arBarrel
+                     // 暫時共用
+                     muzzleFlash.intensity = 15; setTimeout(() => muzzleFlash.intensity = 0, 60);
+                }
+
+                const shootRaycaster = new THREE.Raycaster(); shootRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
+                 const allTargets = [ ...Object.values(remotePlayers).filter(p => p.mesh && p.mesh.visible).map(p => p.mesh), ...botTargets.filter(b => b.visible) ];
+                if (allTargets.length > 0) {
+                    const intersects = shootRaycaster.intersectObjects(allTargets);
+                    if (intersects.length > 0) {
+                        const hitObject = intersects[0].object;
+                        if (hitObject.userData.userId) { const hitUserId = hitObject.userData.userId; if (hitUserId !== userId) { console.log(`Hit player ${hitUserId}!`); await dealDamageToPlayer(hitUserId, currentWeapon.damage); }
+                        } else if (hitObject.userData.isBot) { console.log(`Hit bot ${hitObject.uuid}!`); handleBotHit(hitObject, currentWeapon.damage); }
+                        return;
+                    }
+                 }
+            } else if (currentWeapon.type === 'melee') {
+                 // --- 觸發刀突刺動畫 ---
+                 if (!isKnifeAnimating) {
+                     isKnifeAnimating = true;
+                     knifeTargetPosition = currentWeapon.model.userData.initialPosition.z + KNIFE_LUNGE_AMOUNT; // Lunge forward
+                 }
+                 // ---
+
+                const meleeOrigin = new THREE.Vector3(); const meleeDirection = new THREE.Vector3();
+                camera.getWorldPosition(meleeOrigin); camera.getWorldDirection(meleeDirection);
+                const meleeRaycaster = new THREE.Raycaster(meleeOrigin, meleeDirection, 0, currentWeapon.range);
+                const allTargets = [ ...Object.values(remotePlayers).filter(p => p.mesh && p.mesh.visible).map(p => p.mesh), ...botTargets.filter(b => b.visible) ];
+                if (allTargets.length > 0) {
+                     const meleeIntersects = meleeRaycaster.intersectObjects(allTargets);
+                     if (meleeIntersects.length > 0) {
+                         const hitObject = meleeIntersects[0].object;
+                         if (meleeIntersects[0].distance < currentWeapon.range) {
+                             if (hitObject.userData.userId) { const hitUserId = hitObject.userData.userId; if (hitUserId !== userId) { console.log(`Melee hit player ${hitUserId}!`); await dealDamageToPlayer(hitUserId, currentWeapon.damage); }
+                             } else if (hitObject.userData.isBot) { console.log(`Melee hit bot ${hitObject.uuid}!`); handleBotHit(hitObject, currentWeapon.damage); }
+                             return;
+                         }
+                     }
+                 }
+            }
+        }
+        // ---
+
+        async function dealDamageToPlayer(targetUserId, damageAmount) { /* ... (交易邏輯不變) ... */
+            if (!db) return; const playerDocRef = doc(db, PLAYER_COLLECTION_PATH, targetUserId); console.log(`Attempting to deal ${damageAmount} damage to ${targetUserId}`); try { await runTransaction(db, async (transaction) => { const playerDoc = await transaction.get(playerDocRef); if (!playerDoc.exists()) { console.log(`Player ${targetUserId} not found in Firestore.`); return; } const targetData = playerDoc.data(); if (targetData.isDead === true) { console.log(`Player ${targetUserId} is already dead. No damage dealt.`); return; } const currentHealth = targetData.health || 100; const newHealth = Math.max(0, currentHealth - damageAmount); transaction.update(playerDocRef, { health: newHealth }); console.log(`Updated ${targetUserId} health to ${newHealth}`); }); } catch (error) { console.error("Error dealing damage:", error); }
+        }
+
+        function reload() { /* ... (reload 不變) ... */
+            if (isDead) return; const currentWeapon = weapons[currentWeaponIndex]; if (isReloading || currentWeapon.type === 'melee' || currentWeapon.ammo === currentWeapon.maxAmmo) return; isReloading = true; ammoElement.textContent = '換彈中...'; setTimeout(() => { currentWeapon.ammo = currentWeapon.maxAmmo; isReloading = false; updateAmmoHUD(); }, currentWeapon.reloadTime);
+        }
+
+        function applyRemoteDamage(newHealth) { /* ... (受傷邏輯不變) ... */
+             if (isDead) return; if (typeof newHealth !== 'number' || isNaN(newHealth)) { console.warn("Invalid newHealth value received:", newHealth); return; } const damageTaken = health - newHealth; health = Math.max(0, newHealth); healthElement.textContent = health; if (damageTaken > 0) { console.log(`Applied remote damage. New health: ${health}`); damageOverlayElement.style.backgroundColor = 'rgba(255, 0, 0, 0.6)'; setTimeout(() => damageOverlayElement.style.backgroundColor = 'rgba(255, 0, 0, 0)', 150); lastDamageTime = performance.now(); } if (health <= 0) { handleDeath(); }
+        }
+
+        function handleDeath() { /* ... (死亡邏輯不變) ... */
+            if (isDead) return; console.log("Player died!"); isDead = true; updatePlayerStateToFirestore(true); if (playerBody) playerBody.visible = false; if (fpControls && fpControls.isLocked) fpControls.unlock(); setTimeout(() => { respawn(); }, 3000);
+        }
+
+        function respawn() { /* ... (重生邏輯不變) ... */
+             console.log("Respawning player..."); health = 100; isDead = false; healthElement.textContent = health; if (playerBody) { playerBody.position.copy(SPAWN_POINT); playerBody.visible = !isFirstPerson; } velocity.set(0, 0, 0); weapons.forEach(w => { if(w.type !== 'melee') w.ammo = w.maxAmmo; }); updateAmmoHUD(); if (isFirstPerson && camera && playerBody) { camera.position.copy(playerBody.position); if (fpControls) fpControls.getObject().position.copy(playerBody.position); } if (!isMobile && isFirstPerson) { setTimeout(() => fpControls.lock(), 100); } updatePlayerStateToFirestore(true); console.log("Player respawned.");
+        }
+
+        async function updatePlayerStateToFirestore(forceUpdate = false) { /* ... (Firestore 更新不變) ... */
+            if (!userId || !db || !playerBody) return; const now = performance.now(); if (!forceUpdate && now - lastUpdateTime < 100) return; lastUpdateTime = now; const playerDocRef = doc(db, PLAYER_COLLECTION_PATH, userId); const playerData = { position: { x: playerBody.position.x, y: playerBody.position.y, z: playerBody.position.z }, quaternion: { x: isFirstPerson ? camera.quaternion.x : playerBody.quaternion.x, y: isFirstPerson ? camera.quaternion.y : playerBody.quaternion.y, z: isFirstPerson ? camera.quaternion.z : playerBody.quaternion.z, w: isFirstPerson ? camera.quaternion.w : playerBody.quaternion.w }, health: health, isDead: isDead, currentWeaponIndex: currentWeaponIndex, lastUpdate: serverTimestamp() }; try { await setDoc(playerDocRef, playerData, { merge: true }); } catch (error) { console.error("Error updating player state:", error); }
+        }
+
+        // --- AI Bot Functions ---
+        function spawnBot(isEnemy) { /* ... (spawnBot 不變) ... */
+            const botGeometry = new THREE.BoxGeometry(4, 18, 4); const botMaterial = new THREE.MeshStandardMaterial({ color: isEnemy ? ENEMY_BOT_COLOR : ALLY_BOT_COLOR }); const bot = new THREE.Mesh(botGeometry, botMaterial); const spawnPos = new THREE.Vector3(); const center = new THREE.Vector2(0, 0); const playerPos2D = new THREE.Vector2(SPAWN_POINT.x, SPAWN_POINT.z); const safeRadius = 150; const spawnArea = 800; let attempts = 0; do { spawnPos.set( (Math.random() - 0.5) * spawnArea, 9, (Math.random() - 0.5) * spawnArea ); attempts++; } while ( (new THREE.Vector2(spawnPos.x, spawnPos.z).distanceTo(center) < safeRadius || new THREE.Vector2(spawnPos.x, spawnPos.z).distanceTo(playerPos2D) < safeRadius) && attempts < 50 ); if (attempts >= 50) console.warn("Could not find suitable spawn point for bot after 50 attempts."); bot.position.copy(spawnPos); bot.castShadow = true; bot.receiveShadow = true; bot.userData = { isBot: true, isEnemy: isEnemy, health: 100, collider: new THREE.Box3().setFromObject(bot), state: BOT_STATE.IDLE, targetPosition: null, lastRepathTime: 0 }; scene.add(bot); if (isEnemy) enemyBots.push(bot); else allyBots.push(bot); botTargets.push(bot);
+        }
+         function updateBotCounts() { /* ... (updateBotCounts 不變) ... */
+             enemyBotsCountElement.textContent = enemyBots.length; allyBotsCountElement.textContent = allyBots.length;
+         }
+         function handleBotHit(botMesh, damage) { /* ... (handleBotHit 不變) ... */
+             if (!botMesh || !botMesh.userData.isBot) return; botMesh.userData.health -= damage; console.log(`Bot ${botMesh.uuid} hit, health: ${botMesh.userData.health}`); const originalColor = botMesh.material.color.getHex(); botMesh.material.color.setHex(0xffffff); setTimeout(() => { botMesh.material.color.setHex(originalColor); }, 100); if (botMesh.userData.health <= 0) { console.log(`Bot ${botMesh.uuid} destroyed.`); scene.remove(botMesh); if (botMesh.userData.isEnemy) { const index = enemyBots.indexOf(botMesh); if (index > -1) enemyBots.splice(index, 1); } else { const index = allyBots.indexOf(botMesh); if (index > -1) allyBots.splice(index, 1); } const targetIndex = botTargets.indexOf(botMesh); if (targetIndex > -1) botTargets.splice(targetIndex, 1); updateBotCounts(); setTimeout(() => spawnBot(botMesh.userData.isEnemy), 5000); }
+         }
+
+         function updateBotAI(bot, delta, currentTime) {
+            if (!bot || !bot.userData.isBot || !playerBody) return;
+            bot.userData.collider.setFromObject(bot);
+            const target = playerBody.position;
+            const distanceToTarget = bot.position.distanceTo(target);
+
+            // 狀態決策
+            if (bot.userData.isEnemy) {
+                if (distanceToTarget < BOT_ATTACK_RANGE) bot.userData.state = BOT_STATE.ATTACK;
+                else if (distanceToTarget < 200) bot.userData.state = BOT_STATE.FOLLOW; // 敵人追蹤範圍
+                else bot.userData.state = BOT_STATE.WANDER;
+            } else {
+                if (distanceToTarget > BOT_FOLLOW_DISTANCE) bot.userData.state = BOT_STATE.FOLLOW;
+                else bot.userData.state = BOT_STATE.IDLE;
+            }
+
+            // 狀態執行
+            const directionToTarget = new THREE.Vector3().subVectors(target, bot.position);
+            directionToTarget.y = 0; // Move only on XZ plane
+            const directionToTargetNormalized = directionToTarget.lengthSq() > 0.001 ? directionToTarget.normalize() : null;
+
+            switch(bot.userData.state) {
+                case BOT_STATE.ATTACK:
+                    // 攻擊 (目前只是靠近)
+                    if (directionToTargetNormalized) {
+                         // 稍微減速以避免穿透
+                         bot.position.add(directionToTargetNormalized.multiplyScalar(BOT_SPEED * 0.8 * delta));
+                         // --- 平滑轉向 ---
+                         const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), directionToTargetNormalized);
+                         bot.quaternion.slerp(targetQuaternion, 0.1);
+                         // ---
+                    }
+                    break;
+                case BOT_STATE.FOLLOW:
+                    // 跟隨
+                    if (directionToTargetNormalized) {
+                         const speed = bot.userData.isEnemy ? BOT_SPEED : BOT_SPEED * 0.8;
+                         bot.position.add(directionToTargetNormalized.multiplyScalar(speed * delta));
+                         const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), directionToTargetNormalized);
+                         bot.quaternion.slerp(targetQuaternion, 0.1);
+                    }
+                    break;
+                case BOT_STATE.WANDER:
+                    // 漫遊 (簡易版: 隨機轉向)
+                    if (currentTime - bot.userData.lastRepathTime > 5000) { // 5秒換一次方向
+                         bot.rotation.y = Math.random() * Math.PI * 2;
+                         bot.userData.lastRepathTime = currentTime;
+                    }
+                    const wanderDir = new THREE.Vector3(0,0,1).applyQuaternion(bot.quaternion);
+                    bot.position.add(wanderDir.multiplyScalar(BOT_SPEED * 0.2 * delta));
+                    break;
+                case BOT_STATE.IDLE:
+                    // 待機 (盟友靠太近時)
+                    // (可加入隨機看看四周的動作)
+                    break;
+            }
+         }
+        // ---
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now(); const delta = (time - prevTime) / 1000;
+            const gameActive = isGameActive();
+
+            // --- 刀突刺動畫 ---
+            const knife = weapons[3]?.model;
+            if (knife) {
+                const initialZ = knife.userData.initialPosition.z;
+                if (isKnifeAnimating) {
+                    // Smoothly move towards target Z
+                    knife.position.z = THREE.MathUtils.lerp(knife.position.z, knifeTargetPosition, KNIFE_SWING_SPEED * delta);
+                    // Check if close enough to target, then start returning
+                    if (Math.abs(knife.position.z - knifeTargetPosition) < 0.1) {
+                        knifeTargetPosition = initialZ; // Set target back to initial
+                    }
+                    // Check if close enough to initial, stop animation
+                    if (Math.abs(knife.position.z - initialZ) < 0.05 && knifeTargetPosition === initialZ) {
+                        knife.position.z = initialZ; // Snap to initial
+                        isKnifeAnimating = false;
+                    }
+                } else if (knife.position.z !== initialZ) {
+                    // Ensure it returns fully if animation was interrupted
+                     knife.position.z = THREE.MathUtils.lerp(knife.position.z, initialZ, KNIFE_SWING_SPEED * delta * 0.5);
+                     if (Math.abs(knife.position.z - initialZ) < 0.01) {
+                         knife.position.z = initialZ;
+                     }
+                }
+            }
+            // ---
+
+            if (gameActive && playerBody) {
+                // --- 恢復 W/S 移動邏輯 ---
+                if (slideCooldown > 0) slideCooldown -= delta;
+                raycaster.ray.origin.copy(playerBody.position); raycaster.ray.origin.y = playerBody.position.y;
+                const onObject = raycaster.intersectObjects(groundObjects, false).length > 0;
+                velocity.x -= velocity.x * 10 * delta; velocity.z -= velocity.z * 10 * delta; velocity.y -= 9.8 * 100 * delta;
+                direction.z = Number(moveForward) - Number(moveBackward); // W 前進, S 後退
+                direction.x = Number(moveRight) - Number(moveLeft); direction.normalize();
+                const moveSpeed = 400; const forward = new THREE.Vector3(); const right = new THREE.Vector3(); const moveDirection = new THREE.Vector3();
+                camera.getWorldDirection(forward); forward.y = 0; forward.normalize(); right.crossVectors(camera.up, forward).normalize();
+                if (isSliding) { const slideSpeed = 800; moveDirection.add(forward.multiplyScalar(slideSpeed * delta)); }
+                else { if (moveForward || moveBackward) velocity.z -= direction.z * moveSpeed * delta; if (moveLeft || moveRight) velocity.x -= direction.x * moveSpeed * delta; }
+                if (onObject) { velocity.y = Math.max(0, velocity.y); canJump = true; }
+                moveDirection.add(forward.multiplyScalar(velocity.z * delta)); moveDirection.add(right.multiplyScalar(velocity.x * delta));
+                playerBody.position.add(moveDirection); playerBody.position.y += velocity.y * delta;
+                if (playerBody.position.y < 9) { velocity.y = 0; playerBody.position.y = 9; canJump = true; }
+                // ---
+
+                if (isFirstPerson) { fpControls.getObject().position.copy(playerBody.position); }
+                else { tpControls.target.copy(playerBody.position); tpControls.update(); const moveLengthSq = (moveDirection.x * moveDirection.x) + (moveDirection.z * moveDirection.z); if (moveLengthSq > 0.001) { /* Update player rotation based on move direction relative to camera */ const cameraForward = new THREE.Vector3(); camera.getWorldDirection(cameraForward); cameraForward.y = 0; cameraForward.normalize(); const angle = Math.atan2(moveDirection.x, moveDirection.z); const cameraAngle = Math.atan2(cameraForward.x, cameraForward.z); playerBody.rotation.y = angle + cameraAngle; } }
+                if (isShooting) onPrimaryAction({});
+
+                // --- 玩家與敵人 Bot 碰撞檢測 ---
+                playerCollider.setFromObject(playerBody); // Update player collider
+                for (const enemyBot of enemyBots) {
+                     if (enemyBot.visible && playerCollider.intersectsBox(enemyBot.userData.collider)) {
+                          applyRemoteDamage(health - 1); // Deal small damage on contact
+                     }
+                }
+                // ---
+
+                updatePlayerStateToFirestore();
+            }
+
+            // --- 更新 AI Bots AI ---
+            const currentTime = performance.now();
+            enemyBots.forEach(bot => updateBotAI(bot, delta, currentTime));
+            allyBots.forEach(bot => updateBotAI(bot, delta, currentTime));
+            // ---
+
+            // --- 更新遠端玩家動畫 ---
+            const lerpFactor = 0.15;
+            for (const id in remotePlayers) { /* ... (遠端玩家更新不變) ... */
+                const player = remotePlayers[id]; if (!player || !player.mesh) continue; const shouldBeVisible = player.data.isDead !== true; if (player.mesh.visible !== shouldBeVisible) { player.mesh.visible = shouldBeVisible; console.log(`Set visibility for ${id} to ${shouldBeVisible}`); } if (player.mesh.visible && player.data.position) { const targetPos = new THREE.Vector3(player.data.position.x, player.data.position.y, player.data.position.z); if (player.mesh.position.distanceTo(targetPos) < 50) { player.mesh.position.lerp(targetPos, lerpFactor); } else { player.mesh.position.copy(targetPos); } } if (player.mesh.visible && player.data.quaternion) { const targetQuaternion = new THREE.Quaternion( player.data.quaternion.x, player.data.quaternion.y, player.data.quaternion.z, player.data.quaternion.w ); player.mesh.quaternion.slerp(targetQuaternion, lerpFactor); }
+            }
+            // ---
+
+            renderer.render(scene, camera);
+            prevTime = time;
+        }
+
+    </script>
+</body>
+</html>
+
